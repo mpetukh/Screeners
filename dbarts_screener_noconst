@@ -1,0 +1,48 @@
+# dbarts based screener that picks top k variables
+# Updated to drop constant predictors
+screen.dbarts.nvar <- function (Y,
+                                X,
+                                obsWeights,
+                                nvar = 5,
+                                ntree = 100,
+                                nthread = 1,
+                                ...)
+{
+  unique_vals = sapply(X,
+                       # Make sure that we don't count NA as a unique value.
+                       function(col_vals) length(setdiff(unique(col_vals), NA)))
+  print(unique_vals)
+  constant_columns = colnames(X)[unique_vals < 2L]
+  print(constant_columns)
+  
+  
+  if (length(constant_columns) > 0L) {
+    X = X[, !names(X) %in% constant_columns, drop = FALSE]
+  }
+  
+  cat("Removed", length(constant_columns), "constant predictors.\n")
+  
+  model =
+    dbarts::bart(x.train = X,
+                 y.train = Y,
+                 # We need to pass newX in directly due to lack of prediction.
+                 x.test = X,
+                 weights = obsWeights,
+                 ntree = ntree,
+                 keeptrees = TRUE,
+                 nthread = nthread)
+  
+  
+  dbarts.var.imp <- embarcadero::varimp(model,plot = FALSE)
+  
+  if (length(constant_columns) > 0) {
+  const.col <- dbarts.var.imp[1:length(constant_columns),]
+  const.col$varimps <- 0.0
+  const.col$names <- constant_columns
+  
+  dbarts.var.imp <- rbind(dbarts.var.imp,const.col)
+}
+  whichVariable <- as.vector(rank(-rank(dbarts.var.imp[,2]),) <= nvar)
+  
+  return(whichVariable)
+}
